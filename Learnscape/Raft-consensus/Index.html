@@ -3,46 +3,270 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RAFT Consensus Archipelago :: TokenTown/Learnscape Engine</title>
+    <title>Raft Consensus: Isometric Explorable Cluster</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0d1117; font-family: 'Courier New', Courier, monospace; color: #c9d1d9; user-select: none; }
-        canvas { display: block; touch-action: none; }
+        :root {
+            --bg-base: #090d16;
+            --panel-bg: rgba(15, 23, 42, 0.78);
+            --panel-border: rgba(148, 163, 184, 0.18);
+            --accent-cyan: #38bdf8;
+            --accent-amber: #fbbf24;
+            --accent-emerald: #34d399;
+            --accent-rose: #f43f5e;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
 
-        /* --- HUD / UI --- */
-        #hud { position: absolute; pointer-events: none; }
-        .panel { position: absolute; background: rgba(16, 22, 29, 0.85); border: 1px solid #30363d; border-radius: 6px; padding: 12px; backdrop-filter: blur(4px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); pointer-events: auto; }
-        
-        #top-header { top: 10px; left: 10px; right: 10px; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
-        #app-title { font-weight: bold; font-size: 1.2rem; color: #58a6ff; }
-        #global-metrics { display: flex; gap: 20px; font-size: 0.9rem; }
-        .metric-block { text-align: center; }
-        .metric-value { font-weight: bold; color: #f0883e; }
-        .metric-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
 
-        #story-card { bottom: 80px; left: 10px; width: 340px; }
-        #station-number { position: absolute; top: -15px; left: -15px; width: 30px; height: 30px; background: #f0883e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
-        #station-title { color: #f0883e; font-size: 1.1rem; margin-bottom: 5px; font-weight: bold;}
-        #station-explanation { font-size: 0.9rem; line-height: 1.4; color: #e6edf3; }
-        
-        #progress-container { width: 100%; height: 6px; background: #21262d; border-radius: 3px; margin-top: 10px; overflow: hidden; }
-        #progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #f0883e, #f9c74f); transition: width 0.1s linear; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-base);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-main);
+        }
 
-        #state-inspector { top: 70px; right: 10px; width: 280px; }
-        #state-title { color: #58a6ff; margin-bottom: 8px; font-weight: bold;}
-        #state-content { font-size: 0.8rem; line-height: 1.5; color: #e6edf3; font-family: monospace;}
-        .log-crate-v { color: #8b949e; }
-        .commit-crate-v { color: #aff5b4; font-weight:bold; }
-        .term-v { color: #f0883e; font-weight:bold; }
+        #cityCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
 
-        #controls { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
-        .control-btn { background: rgba(33, 38, 45, 0.9); border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.8rem; transition: background 0.2s; }
-        .control-btn:hover { background: #30363d; }
-        #speed-readout { min-width: 40px; text-align: center; }
+        #cityCanvas:active {
+            cursor: grabbing;
+        }
 
-        @media (max-width: 600px) {
-            #story-card, #state-inspector { width: calc(100vw - 40px); left: 10px; right: 10px; top: initial; bottom: 70px; }
-            #story-card { bottom: 200px; }
-            #controls { width: calc(100vw - 20px); flex-wrap: wrap; justify-content: center;}
+        /* Glassmorphism HUD Overlays */
+        .hud-panel {
+            position: absolute;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.55);
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        /* Top Header */
+        #header-bar {
+            top: 20px;
+            left: 20px;
+            padding: 14px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        #header-bar h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #header-bar h1 span {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: rgba(56, 189, 248, 0.18);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        #header-bar p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Story Step Card */
+        #story-card {
+            top: 20px;
+            right: 20px;
+            width: 360px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #story-card .step-badge {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent-amber);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #story-card h2 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        #story-card p {
+            font-size: 0.83rem;
+            line-height: 1.48;
+            color: #cbd5e1;
+        }
+
+        .dwell-bar-container {
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        #dwell-bar {
+            width: 0%;
+            height: 100%;
+            background: var(--accent-amber);
+            transition: width 0.1s linear;
+        }
+
+        /* Cluster State Inspector */
+        #cluster-inspector {
+            bottom: 84px;
+            left: 20px;
+            width: 320px;
+            padding: 16px;
+        }
+
+        .inspector-title {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .node-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.78rem;
+        }
+
+        .node-tag {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+
+        .node-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .node-logs {
+            font-family: monospace;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+        }
+
+        /* Bottom Controls */
+        #control-bar {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--panel-border);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.18s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            border-color: rgba(255, 255, 255, 0.28);
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .mode-toggle {
+            font-size: 0.74rem;
+            padding: 6px 10px;
+            border-radius: 6px;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .mode-toggle.active {
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .hotkey-legend {
+            position: absolute;
+            bottom: 24px;
+            right: 20px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.5);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            pointer-events: none;
+        }
+
+        .hotkey-legend kbd {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 5px;
+            border-radius: 4px;
+            color: #e2e8f0;
+            font-family: inherit;
         }
     </style>
 </head>
@@ -50,554 +274,714 @@
 
     <canvas id="cityCanvas"></canvas>
 
-    <!-- --- HUD --- -->
-    <div id="hud">
-        <div id="top-header" class="panel">
-            <div id="app-title">LEARNSCAPE::RAFT ARCHIPELAGO</div>
-            <div id="global-metrics">
-                <div class="metric-block"><span id="metric-term" class="metric-value">1</span><br><span class="metric-label">Term</span></div>
-                <div class="metric-block"><span id="metric-leader" class="metric-value">Wait...</span><br><span class="metric-label">Leader</span></div>
-                <div class="metric-block"><span id="metric-commit" class="metric-value">0</span><br><span class="metric-label">Committed</span></div>
-            </div>
-        </div>
+    <div id="header-bar" class="hud-panel">
+        <h1>Raft Consensus <span>TokenTown Engine</span></h1>
+        <p>Leader Election & Replicated Log Pipeline Visualizer</p>
+    </div>
 
-        <div id="story-card" class="panel">
-            <div id="station-number">0</div>
-            <div id="station-title">Island Cluster</div>
-            <div id="station-explanation">Initial state.</div>
-            <div id="progress-container"><div id="progress-bar"></div></div>
+    <div id="story-card" class="hud-panel">
+        <div class="step-badge">
+            <span id="story-phase">Tour Phase 1/5</span>
+            <span id="story-mode-label">Guided Tour</span>
         </div>
-
-        <div id="state-inspector" class="panel">
-            <div id="state-title">Island 1: FOLLOWER</div>
-            <div id="state-content">No logs.</div>
-        </div>
-
-        <div id="controls" class="panel">
-            <button id="btn-playpause" class="control-btn">Pause (Space)</button>
-            <button id="btn-next" class="control-btn">Next (S)</button>
-            <button id="btn-reset" class="control-btn">Restart (R)</button>
-            <div id="speed-readout" class="metric-value">1x</div>
-            <button id="btn-slower" class="control-btn">-</button>
-            <button id="btn-faster" class="control-btn">+</button>
+        <h2 id="story-title">Leader Election Timeout</h2>
+        <p id="story-desc">Follower node timeout expires. Node S1 increments Term and broadcasts RequestVote RPCs to all peers.</p>
+        <div class="dwell-bar-container">
+            <div id="dwell-bar"></div>
         </div>
     </div>
 
-<script>
-/**
- * LEARNscape Engine: RAFT Archipelago Consensus Explainer
- * Pure Vanilla JavaScript (ES6), No Dependencies.
- * Lead Isometric Canvas Architect
- */
+    <div id="cluster-inspector" class="hud-panel">
+        <div class="inspector-title">
+            <span>Cluster Term: <strong id="val-term" style="color:var(--accent-cyan)">1</strong></span>
+            <span>Commit Idx: <strong id="val-commit" style="color:var(--accent-emerald)">0</strong></span>
+        </div>
+        <div id="node-rows">
+            <!-- Dynamically populated -->
+        </div>
+    </div>
 
-(function() {
-    'use strict';
+    <div id="control-bar" class="hud-panel">
+        <button id="btn-play" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg>
+            <span>Pause</span>
+        </button>
+        <button id="btn-step" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h4v16H4zm6 0l10 8-10 8z"/></svg>
+            <span>Next Station</span>
+        </button>
+        <button id="btn-reset" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+            <span>Restart</span>
+        </button>
+        <div style="width: 1px; height: 20px; background: var(--panel-border); margin: 0 4px;"></div>
+        <div id="toggle-tour" class="mode-toggle active">Guided</div>
+        <div id="toggle-free" class="mode-toggle">Cruising</div>
+    </div>
 
-    // --- 1. Engine & Canvas Setup ---
-    const canvas = document.getElementById('cityCanvas');
-    const ctx = canvas.getContext('2d');
-    const dpi = window.devicePixelRatio || 1;
-    let W, H;
+    <div class="hotkey-legend">
+        <kbd>Space</kbd> Play/Pause &nbsp;|&nbsp; <kbd>S</kbd> Next Station &nbsp;|&nbsp; <kbd>R</kbd> Reset &nbsp;|&nbsp; Drag/Scroll Camera
+    </div>
 
-    function resize() {
-        W = window.innerWidth;
-        H = window.innerHeight;
-        canvas.width = W * dpi;
-        canvas.height = H * dpi;
-        canvas.style.width = `${W}px`;
-        canvas.style.height = `${H}px`;
-        ctx.scale(dpi, dpi);
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-    }
-    resize();
-    window.addEventListener('resize', resize);
+    <script>
+        /**
+         * 1. RIGID ISOMETRIC MATH & PROJECTION
+         */
+        const HALF_W = 36;
+        const HALF_H = 18;
 
-    // --- 2. Isometric Camera & Utilities ---
-    const isoW = 32; // Half-tile width
-    const isoH = 16; // Half-tile height
+        function toScreen(gx, gy, gz = 0) {
+            return {
+                x: (gx - gy) * HALF_W,
+                y: (gx + gy) * HALF_H - gz
+            };
+        }
 
-    const cam = { x: 0, y: 0, z: 1.0, tx: 0, ty: 0, tz: 1.0, damping: 0.1 };
-    const mouse = { x: 0, y: 0, px: 0, py: 0, down: false };
+        function toGrid(sx, sy) {
+            return {
+                x: (sx / HALF_W + sy / HALF_H) / 2,
+                y: (sy / HALF_H - sx / HALF_W) / 2
+            };
+        }
 
-    // Tri-Tone Palette (Dark Blue Base)
-    const Pal = {
-        bg: '#0d1117',
-        land: '#21262d',
-        shore: '#30363d',
-        water: '#161b22',
-        bldg_top: '#4a5568',
-        bldg_left: '#2d3748',
-        bldg_right: '#1a202c',
-        road: '#1a202c',
-        lane: '#e6edf3',
-        barge: '#444c56',
-        barge_cab: '#2f363d',
-        status_follower: '#1f6feb',
-        status_candidate: '#f0883e',
-        status_leader: '#3fb950',
-        status_offline: '#484f58',
-        log_crate: '#f0883e', // Orange outline (uncommitted)
-        commit_crate: '#3fb950', // Green solid (committed)
-        conduit_on: '#c9d1d9',
-    };
+        /**
+         * 2. RAFT SIMULATION DOMAIN & STATIONS
+         */
+        const STATIONS = [
+            {
+                id: 's1_election',
+                gx: 5, gy: 5,
+                title: 'Leader Election Trigger',
+                desc: 'Node S1 heartbeat timer expires. It converts to Candidate, increments Term to 1, votes for itself, and broadcasts RequestVote packets.',
+                term: 1, commit: 0,
+                nodes: {
+                    S1: { role: 'Candidate', log: ['init'] },
+                    S2: { role: 'Follower', log: ['init'] },
+                    S3: { role: 'Follower', log: ['init'] }
+                }
+            },
+            {
+                id: 'quorum_grant',
+                gx: 9, gy: 5,
+                title: 'Quorum Vote Granted',
+                desc: 'Followers S2 & S3 receive RequestVote. Since S1\'s term is higher and its log is at least as up-to-date, they grant votes. S1 achieves quorum majority and transitions to Leader.',
+                term: 1, commit: 0,
+                nodes: {
+                    S1: { role: 'Leader', log: ['init'] },
+                    S2: { role: 'Follower', log: ['init'] },
+                    S3: { role: 'Follower', log: ['init'] }
+                }
+            },
+            {
+                id: 'client_proposal',
+                gx: 9, gy: 9,
+                title: 'Client Write & Log Append',
+                desc: 'A client submits state change "SET x=42". The Leader appends entry index #1 to its local log in uncommitted state.',
+                term: 1, commit: 0,
+                nodes: {
+                    S1: { role: 'Leader', log: ['init', 'SET x=42*'] },
+                    S2: { role: 'Follower', log: ['init'] },
+                    S3: { role: 'Follower', log: ['init'] }
+                }
+            },
+            {
+                id: 'append_entries',
+                gx: 5, gy: 9,
+                title: 'AppendEntries RPC Broadcast',
+                desc: 'Leader replicates log #1 across parallel routes via AppendEntries RPCs to S2 and S3, who append the uncommitted entry to their logs.',
+                term: 1, commit: 0,
+                nodes: {
+                    S1: { role: 'Leader', log: ['init', 'SET x=42*'] },
+                    S2: { role: 'Follower', log: ['init', 'SET x=42*'] },
+                    S3: { role: 'Follower', log: ['init', 'SET x=42*'] }
+                }
+            },
+            {
+                id: 'log_commit',
+                gx: 7, gy: 7,
+                title: 'Majority Commit & Apply',
+                desc: 'Once majority acknowledgments return, Leader increments commitIndex to 1, commits entry to State Machine, and notifies followers in next heartbeat.',
+                term: 1, commit: 1,
+                nodes: {
+                    S1: { role: 'Leader', log: ['init', 'SET x=42'] },
+                    S2: { role: 'Follower', log: ['init', 'SET x=42'] },
+                    S3: { role: 'Follower', log: ['init', 'SET x=42'] }
+                }
+            }
+        ];
 
-    function iso(gridX, gridY, zHeight) {
-        return {
-            x: (gridX - gridY) * isoW,
-            y: (gridX + gridY) * isoH - zHeight
+        // Architectural Buildings Definition
+        const DISTRICTS = [
+            { id: 'node_s1', name: 'Node S1 (Candidate/Leader)', gx: 4, gy: 4, sizeX: 2, sizeY: 2, height: 50, color: '#38bdf8', role: 'Candidate' },
+            { id: 'node_s2', name: 'Node S2 (Follower)', gx: 10, gy: 4, sizeX: 2, sizeY: 2, height: 42, color: '#34d399', role: 'Follower' },
+            { id: 'node_s3', name: 'Node S3 (Follower)', gx: 4, gy: 10, sizeX: 2, sizeY: 2, height: 42, color: '#34d399', role: 'Follower' },
+            { id: 'client_gate', name: 'Client Ingress Gateway', gx: 10, gy: 10, sizeX: 2, sizeY: 2, height: 60, color: '#fbbf24', role: 'Gateway' },
+            { id: 'fsm_vault', name: 'State Machine Vault', gx: 7, gy: 7, sizeX: 1.5, sizeY: 1.5, height: 35, color: '#f43f5e', role: 'Storage' }
+        ];
+
+        // Road Polyline Grid Paths
+        const ROAD_WAYPOINTS = [
+            { x: 5, y: 5 },
+            { x: 9, y: 5 },
+            { x: 9, y: 9 },
+            { x: 5, y: 9 },
+            { x: 5, y: 7 },
+            { x: 7, y: 7 },
+            { x: 5, y: 7 },
+            { x: 5, y: 5 }
+        ];
+
+        /**
+         * 3. CARRIER VEHICLE STATE
+         */
+        const vehicle = {
+            gx: 5,
+            gy: 5,
+            targetIdx: 0,
+            progress: 0,
+            speed: 0.008,
+            rotation: 0,
+            cargo: 'RequestVote'
         };
-    }
 
-    // --- 3. Decoupled Simulation State Machine (Genuine RAFT Logic) ---
+        /**
+         * 4. ENGINE STATE & CAMERA
+         */
+        let isPlaying = true;
+        let isGuidedMode = true;
+        let currentStationIdx = 0;
+        let stationDwellTimer = 0;
+        let stationDwellDuration = 5000;
+        let isAtStation = false;
 
-    const RAFT_STATES = { FOLLOWER: 'FOLLOWER', CANDIDATE: 'CANDIDATE', LEADER: 'LEADER' };
+        const camera = {
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0,
+            zoom: 1.15,
+            isDragging: false,
+            dragStartX: 0,
+            dragStartY: 0
+        };
 
-    class RaftNode {
-        constructor(id, x, y) {
-            this.id = id;
-            this.x = x; this.y = y; // Grid positions
-            this.term = 1;
-            this.state = RAFT_STATES.FOLLOWER;
-            this.votedFor = null;
-            this.log = []; // [{ term: 1, data: 101 }]
-            this.commitIndex = 0;
-            this.lastApplied = 0;
-            this.online = true;
-            this.electionTimeout = this.randomTimeout();
-            this.heartbeatTimer = 0;
+        const canvas = document.getElementById('cityCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.scale(dpr, dpr);
         }
-        randomTimeout() { return (5000 + Math.random() * 5000) * (1 / sim.speed); } // Slower than real life
-        resetElectionTimeout() { this.electionTimeout = this.randomTimeout(); }
-    }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-    const cityNodes = [
-        new RaftNode(1, 0, 0),    // Center
-        new RaftNode(2, 0, 10),   // South
-        new RaftNode(3, 10, 0),   // East
-        new RaftNode(4, 0, -10),  // North
-        new RaftNode(5, -10, 0)   // West
-    ];
+        // Initial camera center
+        const initCenter = toScreen(7, 7, 0);
+        camera.x = camera.targetX = initCenter.x;
+        camera.y = camera.targetY = initCenter.y;
 
-    const sim = {
-        running: true,
-        speed: 1.0, // 1x
-        tourMode: true,
-        currentTourStation: 0,
-        tourProgress: 0, // 0..1
-        tourDwellTime: 4000, // ms, minimum
-        lastUpdate: Date.now(),
-        // state transitions
-        currentLogId: 101
-    };
-
-    const TOUR_STATIONS = [
-        { id: 0, title: "Initial State", text: "All Islands start as Followers, waiting for instructions.", dwell: 5000 },
-        { id: 1, title: "Waiting (Timeout)", text: "Followers wait. Node 1 times out.", dwell: 5000 },
-        { id: 2, title: "Island 1: Candidate", text: "Node 1 enters term 2, votes for itself.", dwell: 5000 },
-        { id: 3, title: "RequestVote Beams", text: "Candidate sends votes requests to all others.", dwell: 6000 },
-        { id: 4, title: "Leader Elected", text: "Quorum Achieved! Node 1 is now Leader. Sending heartbeats.", dwell: 7000 },
-        { id: 5, title: "Receive Client Command", text: "Leader receives a new log entry. Must replicate it.", dwell: 6000 },
-        { id: 6, title: "Parallel Replication", text: "Leader sends AppendEntries messages with the new crate.", dwell: 7000 },
-        { id: 7, title: "Commit at Leader", text: "Majority (3/5) acknowledged. Entry is COMMITTED at Leader.", dwell: 8000 },
-        { id: 8, title: "Commit Propagation", text: "Leader applies entry. Tell others to commit.", dwell: 9000 },
-    ];
-
-    // --- 4. JavaScript Isometric Renderer & Code Generation Pipeline ---
-
-    function drawBuilding(ctx, gridX, gridY, w, d, h, style) {
-        const p1 = iso(gridX - w/2, gridY - d/2, 0); // Front-Left
-        const p2 = iso(gridX + w/2, gridY - d/2, 0); // Front-Right
-        const p3 = iso(gridX + w/2, gridY + d/2, 0); // Back-Right
-        const p4 = iso(gridX - w/2, gridY + d/2, 0); // Back-Left
-
-        const p1h = iso(gridX - w/2, gridY - d/2, h);
-        const p2h = iso(gridX + w/2, gridY - d/2, h);
-        const p3h = iso(gridX + w/2, gridY + d/2, h);
-        const p4h = iso(gridX - w/2, gridY + d/2, h);
-
-        // -- Ground Shadow (Translucent Oval) --
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-        ctx.beginPath();
-        ctx.ellipse(iso(gridX, gridY, 0).x, iso(gridX, gridY, 0).y, (w + d) * isoW/2, (w + d) * isoH/2, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // -- Right Face (Shade) --
-        ctx.fillStyle = Pal.bldg_right;
-        ctx.beginPath();
-        ctx.moveTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p3h.x, p3h.y); ctx.lineTo(p2h.x, p2h.y); ctx.closePath();
-        ctx.fill();
-
-        // -- Left Face (Base Midtone) --
-        ctx.fillStyle = Pal.bldg_left;
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p2h.x, p2h.y); ctx.lineTo(p1h.x, p1h.y); ctx.closePath();
-        ctx.fill();
-
-        // -- Top Face (Highlight) --
-        ctx.fillStyle = Pal.bldg_top;
-        ctx.beginPath();
-        ctx.moveTo(p1h.x, p1h.y); ctx.lineTo(p2h.x, p2h.y); ctx.lineTo(p3h.x, p3h.y); ctx.lineTo(p4h.x, p4h.y); ctx.closePath();
-        ctx.fill();
-
-        // -- Architectural Details (Windows) --
-        ctx.strokeStyle = Pal.shore;
-        ctx.lineWidth = 0.5;
-        const floors = Math.floor(h / 8);
-        const bays = Math.floor((w+d) * isoW / 8);
-
-        // Windows (warm light)
-        ctx.fillStyle = 'rgba(255, 255, 200, 0.2)';
-        for (let f = 0; f < floors - 1; f++) {
-            const zOff = 4 + f * 8;
-            for (let b = 0; b < bays; b++) {
-                const bOff = - (w+d)/2 + 2 + b * 4;
-                const win1 = iso(gridX + bOff, gridY - d/2, zOff);
-                if (bOff < w/2) {
-                    ctx.fillRect(win1.x, win1.y, 2, 4); // Left wall
-                }
-            }
-        }
-
-        // -- Top Status Light (Pulsating) --
-        if (style) {
-            const topC = iso(gridX, gridY, h + 2);
-            ctx.fillStyle = style;
-            const size = 3 + Math.sin(Date.now() / 200) * 1.0; // Pulse
-            ctx.beginPath();
-            ctx.ellipse(topC.x, topC.y, size * 2, size, 0, 0, Math.PI * 2);
-            ctx.fill();
-            
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = style;
-            ctx.fillStyle = 'white';
-            ctx.beginPath(); ctx.ellipse(topC.x, topC.y, size/2 * 2, size/2, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.shadowBlur = 0;
-        }
-    }
-
-    function drawCrate(ctx, gridX, gridY, h, color, filled, label) {
-        const cx = iso(gridX, gridY, h);
-        const size = 3;
-        ctx.fillStyle = filled ? color : Pal.water;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        // Top-down crate shape (Isometric Diamond)
-        ctx.moveTo(cx.x - size*2, cx.y);
-        ctx.lineTo(cx.x, cx.y - size);
-        ctx.lineTo(cx.x + size*2, cx.y);
-        ctx.lineTo(cx.x, cx.y + size);
-        ctx.closePath();
-        if (filled) ctx.fill();
-        ctx.stroke();
-
-        // Label (e.g., T1, 101)
-        if (label) {
-            ctx.fillStyle = filled ? Pal.bldg_right : color;
-            ctx.font = '8px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(label, cx.x, cx.y + 2);
-        }
-    }
-
-    function drawLogCarrierBarge(ctx, gridX, gridY, zHeight, nodeID, stateData) {
-        const bx = iso(gridX, gridY, zHeight);
-        ctx.save();
-        ctx.translate(bx.x, bx.y);
-
-        // Chassis (Isometric Trapezoid)
-        ctx.fillStyle = Pal.barge;
-        ctx.beginPath();
-        ctx.moveTo(-16, 0); ctx.lineTo(0, -8); ctx.lineTo(16, 0); ctx.lineTo(0, 8); ctx.closePath();
-        ctx.fill();
-
-        // Cab
-        ctx.fillStyle = Pal.barge_cab;
-        ctx.beginPath();
-        ctx.moveTo(4, 0); ctx.lineTo(12, -4); ctx.lineTo(16, 0); ctx.lineTo(8, 4); ctx.closePath();
-        ctx.fill();
-
-        // Cargo Bays
-        ctx.strokeStyle = Pal.shore;
-        ctx.lineWidth = 1;
-        // Bay 1: Uncommitted
-        ctx.strokeRect(-12, -6, 12, 12);
-        // Bay 2: Committed
-        ctx.strokeRect(0, -6, 12, 12);
-
-        // Status Indicator
-        if (stateData) {
-            const statusCol = Pal[`status_${stateData.state.toLowerCase()}`];
-            ctx.fillStyle = statusCol;
-            ctx.shadowBlur = 10; ctx.shadowColor = statusCol;
-            ctx.beginPath(); ctx.ellipse(12, -2, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.shadowBlur = 0;
-        }
-
-        // Logs/Crates
-        if (stateData && stateData.log) {
-            let lastY = -4;
-            // Draw uncommitted crates (stacked bottom-up)
-            for (let i = 0; i < stateData.log.length; i++) {
-                const entry = stateData.log[i];
-                if (entry.term > stateData.commitIndex) {
-                    drawCrate(ctx, 0, -4 / isoH, lastY / isoW, Pal.log_crate, false, `T${entry.term}`);
-                    lastY -= 6;
-                }
-            }
-            lastY = -4;
-             // Draw committed crates (stacked bottom-up)
-             for (let i = 0; i < stateData.log.length; i++) {
-                const entry = stateData.log[i];
-                if (entry.term <= stateData.commitIndex && entry.term > 0) {
-                    drawCrate(ctx, 4/isoH, -4/isoH, lastY/isoW, Pal.commit_crate, true, `${entry.data}`);
-                    lastY -= 6;
-                }
-            }
-        }
-
-        ctx.restore();
-    }
-
-    // --- 5. Main Loop & Interaction Pipeline ---
-
-    function update() {
-        const now = Date.now();
-        const delta = (now - sim.lastUpdate) * sim.speed;
-        sim.lastUpdate = now;
-
-        // Camera Lerp
-        cam.x += (cam.tx - cam.x) * cam.damping;
-        cam.y += (cam.ty - cam.y) * cam.damping;
-        cam.z += (cam.tz - cam.z) * cam.damping;
-
-        // Raft Logic Updates
-        if (sim.running && !sim.tourMode) {
-            cityNodes.forEach(node => {
-                if (node.online && node.state === RAFT_STATES.FOLLOWER) {
-                    node.electionTimeout -= delta;
-                    if (node.electionTimeout <= 0) {
-                        // Start Election
-                        node.state = RAFT_STATES.CANDIDATE;
-                        node.term++;
-                        node.votedFor = node.id;
-                        node.resetElectionTimeout();
-                        // (Mock: Assume instant quorum and become leader for simple flow)
-                        setTimeout(() => {
-                            node.state = RAFT_STATES.LEADER;
-                            // Leader Setup: Add an empty "T1, CMD 1" commit for visual start
-                            if(node.id === 1 && node.commitIndex === 0) {
-                                node.log.push({term: 1, data: 'INIT'});
-                                node.commitIndex = 1;
-                            }
-                        }, 1000 * (1/sim.speed));
-                    }
-                }
-            });
-        }
-
-        // Tour Mode Progress
-        if (sim.tourMode && sim.running) {
-            const station = TOUR_STATIONS[sim.currentTourStation];
-            const realDwell = Math.max(sim.tourDwellTime, (station.dwell || 0) * (1 / sim.speed));
-            sim.tourProgress += delta / realDwell;
-            
-            if (sim.tourProgress >= 1.0) {
-                // Advance to next station automatically
-                advanceTour();
-            }
-        }
-    }
-
-    function advanceTour() {
-        if(sim.currentTourStation < TOUR_STATIONS.length - 1) {
-            sim.currentTourStation++;
-            sim.tourProgress = 0;
-            // Update UI
-            updateTourUI();
-            updateStateInspector(1); // Inspect node 1 by default
-        } else {
-            // End of Tour, switch to free-run mode
-            sim.tourMode = false;
-            sim.running = true;
-            document.getElementById('story-card').style.display = 'none';
-        }
-    }
-
-    function updateTourUI() {
-        const station = TOUR_STATIONS[sim.currentTourStation];
-        document.getElementById('station-number').innerText = station.id;
-        document.getElementById('station-title').innerText = station.title;
-        document.getElementById('station-explanation').innerText = station.text;
-        
-        // Custom camera targets based on station
-        const followNode = cityNodes[0];
-        cam.tx = followNode.x * isoW + (followNode.id - 3)*5 * isoW;
-        cam.ty = followNode.y * isoH - 100;
-
-        // Custom State Actions for the tour
-        const node1 = cityNodes[0];
-        switch(station.id) {
-            case 0: break; // Init
-            case 2: node1.state = RAFT_STATES.CANDIDATE; node1.term = 2; node1.votedFor = node1.id; break;
-            case 4: node1.state = RAFT_STATES.LEADER; break;
-            case 5: if(node1.id === 1 && node1.log.length === 1) node1.log.push({term: 2, data: sim.currentLogId++}); break;
-            case 7: if(node1.id === 1 && node1.commitIndex < node1.log.length) node1.commitIndex = node1.log.length; break;
-            case 8: // Followers commit
-                cityNodes.forEach(n => {
-                    if (n.log.length < node1.log.length) {
-                        n.log = [...node1.log]; // Simplification for tour
-                        n.commitIndex = node1.commitIndex;
-                    }
-                }); break;
-        }
-    }
-
-    function updateGlobalMetrics() {
-        // Find Leader
-        let leader = cityNodes.find(n => n.state === RAFT_STATES.LEADER);
-        document.getElementById('metric-term').innerText = cityNodes[0].term;
-        document.getElementById('metric-leader').innerText = leader ? `Island ${leader.id}` : "WAITING";
-        document.getElementById('metric-commit').innerText = leader ? leader.commitIndex : "0";
-    }
-
-    function updateStateInspector(nodeId) {
-        const node = cityNodes[nodeId - 1];
-        if (!node) return;
-        document.getElementById('state-title').innerText = `Island ${node.id}: ${node.state}`;
-        const col = Pal[`status_${node.state.toLowerCase()}`];
-        document.getElementById('state-title').style.color = col;
-
-        let logStr = "[<br>";
-        node.log.forEach((entry, idx) => {
-            const committed = idx < node.commitIndex;
-            const entryStr = committed ? 
-                ` <span class="commit-crate-v">{ T:<span class="term-v">${entry.term}</span>, D:${entry.data} }</span>` :
-                ` <span class="log-crate-v">{ T:${entry.term}, D:??? }</span>`; // Hide uncommitted data
-            logStr += `  ${entryStr},<br>`;
+        /**
+         * 5. INPUT & INTERACTION HANDLERS
+         */
+        canvas.addEventListener('mousedown', e => {
+            camera.isDragging = true;
+            camera.dragStartX = e.clientX;
+            camera.dragStartY = e.clientY;
         });
-        logStr += "]";
 
-        const contentStr = `
-            Term: <span class="term-v">${node.term}</span><br>
-            VotedFor: ${node.votedFor ? `Island ${node.votedFor}` : "null"}<br>
-            CommitIndex: ${node.commitIndex}<br>
-            LastApplied: ${node.lastApplied}<br>
-            Election T/O: ${node.state === RAFT_STATES.FOLLOWER ? `${Math.round(node.electionTimeout/1000)}s` : "N/A"}<br>
-            ---LogEntries---<br>
-            ${logStr}
-        `;
-        document.getElementById('state-content').innerHTML = contentStr;
-    }
+        window.addEventListener('mousemove', e => {
+            if (!camera.isDragging) return;
+            const dx = (e.clientX - camera.dragStartX) / camera.zoom;
+            const dy = (e.clientY - camera.dragStartY) / camera.zoom;
+            camera.x -= dx;
+            camera.y -= dy;
+            camera.targetX = camera.x;
+            camera.targetY = camera.y;
+            camera.dragStartX = e.clientX;
+            camera.dragStartY = e.clientY;
+        });
 
-    function draw() {
-        ctx.fillStyle = Pal.bg;
-        ctx.fillRect(0, 0, W, H);
+        window.addEventListener('mouseup', () => { camera.isDragging = false; });
 
-        ctx.save();
-        ctx.translate(W/2 - cam.x * cam.z, H/2 - cam.y * cam.z);
-        ctx.scale(cam.z, cam.z);
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+            camera.zoom = Math.min(Math.max(camera.zoom * zoomFactor, 0.45), 2.2);
+        }, { passive: false });
 
-        // -- Water and Island Bases --
-        ctx.fillStyle = Pal.water;
-        ctx.fillRect(-W*2, -H*2, W*4, H*4);
+        const btnPlay = document.getElementById('btn-play');
+        const btnStep = document.getElementById('btn-step');
+        const btnReset = document.getElementById('btn-reset');
+        const toggleTour = document.getElementById('toggle-tour');
+        const toggleFree = document.getElementById('toggle-free');
 
-        // -- Consensus Cables --
-        const node1 = cityNodes[0];
-        if (node1.state === RAFT_STATES.LEADER || node1.state === RAFT_STATES.CANDIDATE) {
-            ctx.lineWidth = 1;
-            const style = node1.state === RAFT_STATES.LEADER ? Pal.status_leader : Pal.status_candidate;
-            cityNodes.forEach(target => {
-                if(target.id !== node1.id) {
-                    const start = iso(node1.x, node1.y, 1);
-                    const end = iso(target.x, target.y, 1);
-                    ctx.shadowBlur = 8; ctx.shadowColor = style;
-                    ctx.strokeStyle = style;
-                    ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
-                    ctx.shadowBlur = 0;
+        function setPlaying(play) {
+            isPlaying = play;
+            btnPlay.innerHTML = isPlaying 
+                ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg><span>Pause</span>'
+                : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l15 8-15 8z"/></svg><span>Resume</span>';
+        }
 
-                    // Dash pulses
-                    ctx.setLineDash([10, 20]);
-                    ctx.lineDashOffset = -Date.now() / 50;
-                    ctx.strokeStyle = 'white';
+        btnPlay.addEventListener('click', () => setPlaying(!isPlaying));
+
+        function goToStation(idx) {
+            currentStationIdx = (idx + STATIONS.length) % STATIONS.length;
+            const st = STATIONS[currentStationIdx];
+            vehicle.gx = st.gx;
+            vehicle.gy = st.gy;
+            isAtStation = true;
+            stationDwellTimer = 0;
+            const wordCount = st.desc.split(' ').length;
+            stationDwellDuration = Math.max(4500, wordCount * 280);
+            updateHud(st);
+        }
+
+        btnStep.addEventListener('click', () => {
+            goToStation(currentStationIdx + 1);
+        });
+
+        btnReset.addEventListener('click', () => {
+            goToStation(0);
+            setPlaying(true);
+        });
+
+        toggleTour.addEventListener('click', () => {
+            isGuidedMode = true;
+            toggleTour.classList.add('active');
+            toggleFree.classList.remove('active');
+            document.getElementById('story-mode-label').innerText = 'Guided Tour';
+        });
+
+        toggleFree.addEventListener('click', () => {
+            isGuidedMode = false;
+            toggleFree.classList.add('active');
+            toggleTour.classList.remove('active');
+            document.getElementById('story-mode-label').innerText = 'Cruising Run';
+            isAtStation = false;
+        });
+
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                setPlaying(!isPlaying);
+            } else if (e.code === 'KeyS') {
+                goToStation(currentStationIdx + 1);
+            } else if (e.code === 'KeyR') {
+                goToStation(0);
+                setPlaying(true);
+            }
+        });
+
+        /**
+         * 6. HUD SYNCHRONIZATION
+         */
+        function updateHud(st) {
+            document.getElementById('story-phase').innerText = `Phase ${currentStationIdx + 1}/${STATIONS.length}`;
+            document.getElementById('story-title').innerText = st.title;
+            document.getElementById('story-desc').innerText = st.desc;
+            document.getElementById('val-term').innerText = st.term;
+            document.getElementById('val-commit').innerText = st.commit;
+
+            // Update Nodes status
+            const rowsCont = document.getElementById('node-rows');
+            rowsCont.innerHTML = '';
+            for (const [nodeId, nData] of Object.entries(st.nodes)) {
+                const color = nData.role === 'Leader' ? '#38bdf8' : (nData.role === 'Candidate' ? '#fbbf24' : '#34d399');
+                const row = document.createElement('div');
+                row.className = 'node-row';
+                row.innerHTML = `
+                    <div class="node-tag">
+                        <div class="node-indicator" style="background:${color}; box-shadow: 0 0 8px ${color}"></div>
+                        <span>${nodeId} (${nData.role})</span>
+                    </div>
+                    <div class="node-logs">[${nData.log.join(', ')}]</div>
+                `;
+                rowsCont.appendChild(row);
+            }
+        }
+
+        // Initialize HUD
+        updateHud(STATIONS[0]);
+
+        /**
+         * 7. PROCEDURAL RASTERIZING & DRAWING
+         */
+        function drawGroundGrid(ctx) {
+            const GRID_SIZE = 16;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    const p = toScreen(x, y, 0);
+                    ctx.beginPath();
+                    ctx.moveTo(p.x, p.y);
+                    ctx.lineTo(p.x + HALF_W, p.y + HALF_H);
+                    ctx.lineTo(p.x, p.y + HALF_H * 2);
+                    ctx.lineTo(p.x - HALF_W, p.y + HALF_H);
+                    ctx.closePath();
+
+                    ctx.fillStyle = (x + y) % 2 === 0 ? '#111827' : '#0f172a';
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
+                    ctx.lineWidth = 1;
                     ctx.stroke();
-                    ctx.setLineDash([]);
                 }
-            });
+            }
         }
 
-        // -- Raft Fortresses (Buildings) --
-        cityNodes.forEach(node => {
-            const statusCol = node.online ? Pal[`status_${node.state.toLowerCase()}`] : Pal.status_offline;
-            drawBuilding(ctx, node.x, node.y, 5, 5, 20, statusCol);
+        function drawRoads(ctx) {
+            ctx.save();
+            // Road background
+            ctx.strokeStyle = '#020617';
+            ctx.lineWidth = 16;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ROAD_WAYPOINTS.forEach((pt, i) => {
+                const sp = toScreen(pt.x, pt.y, 0);
+                if (i === 0) ctx.moveTo(sp.x, sp.y);
+                else ctx.lineTo(sp.x, sp.y);
+            });
+            ctx.stroke();
 
-            // Gantry for leader
-            if(node.state === RAFT_STATES.LEADER) {
-                const start = iso(node.x, node.y, 22);
-                const end = iso(node.x, node.y, 35);
-                ctx.strokeStyle = Pal.conduit_on;
-                ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
-                ctx.fillRect(iso(node.x-2, node.y-2, 35).x, iso(node.x-2, node.y-2, 35).y, isoW*2, isoH*2);
+            // Road border outline
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 18;
+            ctx.globalCompositeOperation = 'destination-over';
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
+
+            // Dashed yellow centerline
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 6]);
+            ctx.beginPath();
+            ROAD_WAYPOINTS.forEach((pt, i) => {
+                const sp = toScreen(pt.x, pt.y, 0);
+                if (i === 0) ctx.moveTo(sp.x, sp.y);
+                else ctx.lineTo(sp.x, sp.y);
+            });
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawBuilding(ctx, b) {
+            const sp = toScreen(b.gx, b.gy, 0);
+            const w = b.sizeX * HALF_W;
+            const h = b.sizeY * HALF_H;
+            const bldgHeight = b.height;
+
+            ctx.save();
+
+            // 1. Cast Footprint Shadow
+            ctx.beginPath();
+            ctx.moveTo(sp.x + 8, sp.y + 8);
+            ctx.lineTo(sp.x + w + 16, sp.y + h + 8);
+            ctx.lineTo(sp.x + 8, sp.y + h * 2 + 8);
+            ctx.lineTo(sp.x - w + 8, sp.y + h + 8);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+            ctx.fill();
+
+            // 2. Left Facade (Midtone)
+            ctx.beginPath();
+            ctx.moveTo(sp.x - w, sp.y + h);
+            ctx.lineTo(sp.x, sp.y + h * 2);
+            ctx.lineTo(sp.x, sp.y + h * 2 - bldgHeight);
+            ctx.lineTo(sp.x - w, sp.y + h - bldgHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctx.stroke();
+
+            // 3. Right Facade (Shadow)
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y + h);
+            ctx.lineTo(sp.x + w, sp.y + h);
+            ctx.lineTo(sp.x + w, sp.y + h - bldgHeight);
+            ctx.lineTo(sp.x, sp.y + h * 2 - bldgHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#0f172a';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+            ctx.stroke();
+
+            // 4. Top Roof Face (Highlight)
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y - bldgHeight);
+            ctx.lineTo(sp.x + w, sp.y + h - bldgHeight);
+            ctx.lineTo(sp.x, sp.y + h * 2 - bldgHeight);
+            ctx.lineTo(sp.x - w, sp.y + h - bldgHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#334155';
+            ctx.fill();
+            ctx.strokeStyle = b.color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Procedural Roof Details / Glowing Beacon
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y + h - bldgHeight - 6, 4, 0, Math.PI * 2);
+            ctx.fillStyle = b.color;
+            ctx.shadowColor = b.color;
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Rooftop Antenna
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y + h - bldgHeight);
+            ctx.lineTo(sp.x, sp.y + h - bldgHeight - 14);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Badge Label
+            ctx.font = '600 10px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            const textWidth = ctx.measureText(b.name).width;
+            const badgeY = sp.y + h - bldgHeight - 24;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(sp.x - textWidth / 2 - 8, badgeY - 11, textWidth + 16, 18, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillText(b.name, sp.x, badgeY + 2);
+
+            ctx.restore();
+        }
+
+        function drawCarrierVehicle(ctx, v) {
+            const sp = toScreen(v.gx, v.gy, 0);
+
+            ctx.save();
+
+            // Vehicle Drop Shadow
+            ctx.beginPath();
+            ctx.ellipse(sp.x, sp.y + 4, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fill();
+
+            // Body Chassis (Isometric block)
+            const vHeight = 8;
+            const vw = 8;
+            const vh = 5;
+
+            // Left side
+            ctx.beginPath();
+            ctx.moveTo(sp.x - vw, sp.y);
+            ctx.lineTo(sp.x, sp.y + vh);
+            ctx.lineTo(sp.x, sp.y + vh - vHeight);
+            ctx.lineTo(sp.x - vw, sp.y - vHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+
+            // Right side
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y + vh);
+            ctx.lineTo(sp.x + vw, sp.y);
+            ctx.lineTo(sp.x + vw, sp.y - vHeight);
+            ctx.lineTo(sp.x, sp.y + vh - vHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#0369a1';
+            ctx.fill();
+
+            // Top side
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y - vHeight - vh);
+            ctx.lineTo(sp.x + vw, sp.y - vHeight);
+            ctx.lineTo(sp.x, sp.y - vHeight + vh);
+            ctx.lineTo(sp.x - vw, sp.y - vHeight);
+            ctx.closePath();
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+
+            // Cargo Payload Box (Floating neon container)
+            const cargoY = sp.y - vHeight - 10 + Math.sin(Date.now() * 0.005) * 2;
+            ctx.beginPath();
+            ctx.arc(sp.x, cargoY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#facc15';
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = 8;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Vehicle Tag
+            ctx.font = '700 8px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('RPC-CARRIER', sp.x, sp.y - vHeight - 16);
+
+            ctx.restore();
+        }
+
+        function drawRPCBeams(ctx) {
+            // Animated heartbeat packets between districts
+            if (currentStationIdx >= 1) {
+                const s1 = toScreen(4, 4, 30);
+                const s2 = toScreen(10, 4, 25);
+                const s3 = toScreen(4, 10, 25);
+
+                const t = (Date.now() * 0.002) % 1;
+
+                // Beam S1 -> S2
+                ctx.save();
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+                ctx.setLineDash([3, 5]);
+                ctx.beginPath();
+                ctx.moveTo(s1.x, s1.y);
+                ctx.lineTo(s2.x, s2.y);
+                ctx.stroke();
+
+                // Beam S1 -> S3
+                ctx.beginPath();
+                ctx.moveTo(s1.x, s1.y);
+                ctx.lineTo(s3.x, s3.y);
+                ctx.stroke();
+
+                // Pulse packet S1 -> S2
+                const px1 = s1.x + (s2.x - s1.x) * t;
+                const py1 = s1.y + (s2.y - s1.y) * t;
+                ctx.beginPath();
+                ctx.arc(px1, py1, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#38bdf8';
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 6;
+                ctx.fill();
+
+                // Pulse packet S1 -> S3
+                const px2 = s1.x + (s3.x - s1.x) * t;
+                const py2 = s1.y + (s3.y - s1.y) * t;
+                ctx.beginPath();
+                ctx.arc(px2, py2, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#38bdf8';
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        /**
+         * 8. SIMULATION UPDATE & PACING PIPELINE
+         */
+        let lastTimestamp = performance.now();
+
+        function updateSimulation(dt) {
+            if (!isPlaying) return;
+
+            if (isGuidedMode && isAtStation) {
+                stationDwellTimer += dt;
+                const progressPct = Math.min(100, (stationDwellTimer / stationDwellDuration) * 100);
+                document.getElementById('dwell-bar').style.width = `${progressPct}%`;
+
+                if (stationDwellTimer >= stationDwellDuration) {
+                    isAtStation = false;
+                    stationDwellTimer = 0;
+                    document.getElementById('dwell-bar').style.width = '0%';
+                    // Progress to next station waypoint
+                    vehicle.targetIdx = (vehicle.targetIdx + 1) % ROAD_WAYPOINTS.length;
+                }
+                return;
             }
 
-            // Labels
-            const labelPos = iso(node.x, node.y, 40);
-            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(labelPos.x - 30, labelPos.y - 12, 60, 16);
-            ctx.fillStyle = statusCol; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.fillText(`N${node.id}: ${node.state}`, labelPos.x, labelPos.y);
-        });
+            // Move vehicle along road waypoints
+            const targetWP = ROAD_WAYPOINTS[vehicle.targetIdx];
+            const dx = targetWP.x - vehicle.gx;
+            const dy = targetWP.y - vehicle.gy;
+            const dist = Math.hypot(dx, dy);
 
-        // -- Log Carrier Barge --
-        drawLogCarrierBarge(ctx, node1.x, node1.y, 2, 1, node1);
+            if (dist < 0.05) {
+                vehicle.gx = targetWP.x;
+                vehicle.gy = targetWP.y;
+                vehicle.targetIdx = (vehicle.targetIdx + 1) % ROAD_WAYPOINTS.length;
 
-        ctx.restore();
-
-        // UI Updates
-        updateGlobalMetrics();
-        updateStateInspector(1);
-        if (sim.tourMode) {
-            document.getElementById('progress-bar').style.width = `${sim.tourProgress * 100}%`;
+                // Check if arrived at a station
+                const matchingStationIdx = STATIONS.findIndex(st => Math.hypot(st.gx - vehicle.gx, st.gy - vehicle.gy) < 0.1);
+                if (matchingStationIdx !== -1) {
+                    currentStationIdx = matchingStationIdx;
+                    updateHud(STATIONS[currentStationIdx]);
+                    if (isGuidedMode) {
+                        isAtStation = true;
+                        stationDwellTimer = 0;
+                        const wordCount = STATIONS[currentStationIdx].desc.split(' ').length;
+                        stationDwellDuration = Math.max(4500, wordCount * 280);
+                    }
+                }
+            } else {
+                const moveDist = vehicle.speed * (dt / 16.66);
+                vehicle.gx += (dx / dist) * Math.min(moveDist, dist);
+                vehicle.gy += (dy / dist) * Math.min(moveDist, dist);
+            }
         }
-    }
 
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-    }
-    loop();
+        /**
+         * 9. MAIN RENDER LOOP WITH STRICT DEPTH SORTING
+         */
+        function mainLoop(timestamp) {
+            const dt = timestamp - lastTimestamp;
+            lastTimestamp = timestamp;
 
-    // --- 6. Interaction Handlers ---
+            updateSimulation(dt);
 
-    canvas.addEventListener('mousedown', e => { mouse.down = true; mouse.px = e.clientX; mouse.py = e.clientY; });
-    window.addEventListener('mouseup', () => { mouse.down = false; });
-    window.addEventListener('mousemove', e => {
-        if (mouse.down) {
-            cam.tx -= (e.clientX - mouse.px) / cam.z;
-            cam.ty -= (e.clientY - mouse.py) / cam.z;
-            mouse.px = e.clientX; mouse.py = e.clientY;
+            // Smooth Camera Lerp towards Vehicle
+            const vScreen = toScreen(vehicle.gx, vehicle.gy, 0);
+            if (!camera.isDragging) {
+                camera.targetX = vScreen.x;
+                camera.targetY = vScreen.y;
+                camera.x += (camera.targetX - camera.x) * 0.06;
+                camera.y += (camera.targetY - camera.y) * 0.06;
+            }
+
+            // Clear Screen
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            ctx.save();
+            // Apply Camera Transform
+            const centerX = canvas.width / (2 * (window.devicePixelRatio || 1));
+            const centerY = canvas.height / (2 * (window.devicePixelRatio || 1));
+            ctx.translate(centerX, centerY);
+            ctx.scale(camera.zoom, camera.zoom);
+            ctx.translate(-camera.x, -camera.y);
+
+            // Base Layer: Ground Grid & Asphalt Roads
+            drawGroundGrid(ctx);
+            drawRoads(ctx);
+            drawRPCBeams(ctx);
+
+            // STRICT DEPTH SORTING (Painter's Algorithm: Depth = gx + gy)
+            const renderQueue = [
+                ...DISTRICTS.map(d => ({ type: 'building', depth: d.gx + d.gy + d.sizeX + d.sizeY, data: d })),
+                { type: 'vehicle', depth: vehicle.gx + vehicle.gy, data: vehicle }
+            ];
+
+            renderQueue.sort((a, b) => a.depth - b.depth);
+
+            // Rasterize in sorted order
+            renderQueue.forEach(item => {
+                if (item.type === 'building') {
+                    drawBuilding(ctx, item.data);
+                } else if (item.type === 'vehicle') {
+                    drawCarrierVehicle(ctx, item.data);
+                }
+            });
+
+            ctx.restore();
+
+            requestAnimationFrame(mainLoop);
         }
-    });
-    window.addEventListener('wheel', e => {
-        cam.tz = Math.max(0.3, Math.min(2.5, cam.tz + (e.deltaY < 0 ? 0.1 : -0.1)));
-    });
 
-    document.addEventListener('keydown', e => {
-        if (e.code === 'Space') { sim.running = !sim.running; document.getElementById('btn-playpause').innerText = sim.running ? "Pause (Space)" : "Play (Space)"; }
-        if (e.code === 'KeyS') { advanceTour(); }
-        if (e.code === 'KeyR') { sim.currentTourStation = 0; updateTourUI(); }
-    });
-
-    document.getElementById('btn-playpause').onclick = () => { sim.running = !sim.running; document.getElementById('btn-playpause').innerText = sim.running ? "Pause (Space)" : "Play (Space)"; };
-    document.getElementById('btn-next').onclick = advanceTour;
-    document.getElementById('btn-reset').onclick = () => { sim.currentTourStation = 0; updateTourUI(); };
-    document.getElementById('btn-faster').onclick = () => { sim.speed = Math.min(4, sim.speed * 2); document.getElementById('speed-readout').innerText = `${sim.speed}x`; };
-    document.getElementById('btn-slower').onclick = () => { sim.speed = Math.max(0.125, sim.speed / 2); document.getElementById('speed-readout').innerText = `${sim.speed}x`; };
-
-    // Start with tour station 0
-    updateTourUI();
-
-})();
-</script>
+        requestAnimationFrame(mainLoop);
+    </script>
 </body>
 </html>
