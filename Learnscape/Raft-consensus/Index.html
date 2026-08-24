@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAFT Consensus Archipelago :: TokenTown/Learnscape Engine</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0d1117; font-family: 'Courier New', Courier, monospace; color: #c9d1d9; user-select: none; }
+        canvas { display: block; touch-action: none; }
+
+        /* --- HUD / UI --- */
+        #hud { position: absolute; pointer-events: none; }
+        .panel { position: absolute; background: rgba(16, 22, 29, 0.85); border: 1px solid #30363d; border-radius: 6px; padding: 12px; backdrop-filter: blur(4px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); pointer-events: auto; }
+        
+        #top-header { top: 10px; left: 10px; right: 10px; height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+        #app-title { font-weight: bold; font-size: 1.2rem; color: #58a6ff; }
+        #global-metrics { display: flex; gap: 20px; font-size: 0.9rem; }
+        .metric-block { text-align: center; }
+        .metric-value { font-weight: bold; color: #f0883e; }
+        .metric-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; }
+
+        #story-card { bottom: 80px; left: 10px; width: 340px; }
+        #station-number { position: absolute; top: -15px; left: -15px; width: 30px; height: 30px; background: #f0883e; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        #station-title { color: #f0883e; font-size: 1.1rem; margin-bottom: 5px; font-weight: bold;}
+        #station-explanation { font-size: 0.9rem; line-height: 1.4; color: #e6edf3; }
+        
+        #progress-container { width: 100%; height: 6px; background: #21262d; border-radius: 3px; margin-top: 10px; overflow: hidden; }
+        #progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #f0883e, #f9c74f); transition: width 0.1s linear; }
+
+        #state-inspector { top: 70px; right: 10px; width: 280px; }
+        #state-title { color: #58a6ff; margin-bottom: 8px; font-weight: bold;}
+        #state-content { font-size: 0.8rem; line-height: 1.5; color: #e6edf3; font-family: monospace;}
+        .log-crate-v { color: #8b949e; }
+        .commit-crate-v { color: #aff5b4; font-weight:bold; }
+        .term-v { color: #f0883e; font-weight:bold; }
+
+        #controls { bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; }
+        .control-btn { background: rgba(33, 38, 45, 0.9); border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.8rem; transition: background 0.2s; }
+        .control-btn:hover { background: #30363d; }
+        #speed-readout { min-width: 40px; text-align: center; }
+
+        @media (max-width: 600px) {
+            #story-card, #state-inspector { width: calc(100vw - 40px); left: 10px; right: 10px; top: initial; bottom: 70px; }
+            #story-card { bottom: 200px; }
+            #controls { width: calc(100vw - 20px); flex-wrap: wrap; justify-content: center;}
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="cityCanvas"></canvas>
+
+    <!-- --- HUD --- -->
+    <div id="hud">
+        <div id="top-header" class="panel">
+            <div id="app-title">LEARNSCAPE::RAFT ARCHIPELAGO</div>
+            <div id="global-metrics">
+                <div class="metric-block"><span id="metric-term" class="metric-value">1</span><br><span class="metric-label">Term</span></div>
+                <div class="metric-block"><span id="metric-leader" class="metric-value">Wait...</span><br><span class="metric-label">Leader</span></div>
+                <div class="metric-block"><span id="metric-commit" class="metric-value">0</span><br><span class="metric-label">Committed</span></div>
+            </div>
+        </div>
+
+        <div id="story-card" class="panel">
+            <div id="station-number">0</div>
+            <div id="station-title">Island Cluster</div>
+            <div id="station-explanation">Initial state.</div>
+            <div id="progress-container"><div id="progress-bar"></div></div>
+        </div>
+
+        <div id="state-inspector" class="panel">
+            <div id="state-title">Island 1: FOLLOWER</div>
+            <div id="state-content">No logs.</div>
+        </div>
+
+        <div id="controls" class="panel">
+            <button id="btn-playpause" class="control-btn">Pause (Space)</button>
+            <button id="btn-next" class="control-btn">Next (S)</button>
+            <button id="btn-reset" class="control-btn">Restart (R)</button>
+            <div id="speed-readout" class="metric-value">1x</div>
+            <button id="btn-slower" class="control-btn">-</button>
+            <button id="btn-faster" class="control-btn">+</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * LEARNscape Engine: RAFT Archipelago Consensus Explainer
+ * Pure Vanilla JavaScript (ES6), No Dependencies.
+ * Lead Isometric Canvas Architect
+ */
+
+(function() {
+    'use strict';
+
+    // --- 1. Engine & Canvas Setup ---
+    const canvas = document.getElementById('cityCanvas');
+    const ctx = canvas.getContext('2d');
+    const dpi = window.devicePixelRatio || 1;
+    let W, H;
+
+    function resize() {
+        W = window.innerWidth;
+        H = window.innerHeight;
+        canvas.width = W * dpi;
+        canvas.height = H * dpi;
+        canvas.style.width = `${W}px`;
+        canvas.style.height = `${H}px`;
+        ctx.scale(dpi, dpi);
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // --- 2. Isometric Camera & Utilities ---
+    const isoW = 32; // Half-tile width
+    const isoH = 16; // Half-tile height
+
+    const cam = { x: 0, y: 0, z: 1.0, tx: 0, ty: 0, tz: 1.0, damping: 0.1 };
+    const mouse = { x: 0, y: 0, px: 0, py: 0, down: false };
+
+    // Tri-Tone Palette (Dark Blue Base)
+    const Pal = {
+        bg: '#0d1117',
+        land: '#21262d',
+        shore: '#30363d',
+        water: '#161b22',
+        bldg_top: '#4a5568',
+        bldg_left: '#2d3748',
+        bldg_right: '#1a202c',
+        road: '#1a202c',
+        lane: '#e6edf3',
+        barge: '#444c56',
+        barge_cab: '#2f363d',
+        status_follower: '#1f6feb',
+        status_candidate: '#f0883e',
+        status_leader: '#3fb950',
+        status_offline: '#484f58',
+        log_crate: '#f0883e', // Orange outline (uncommitted)
+        commit_crate: '#3fb950', // Green solid (committed)
+        conduit_on: '#c9d1d9',
+    };
+
+    function iso(gridX, gridY, zHeight) {
+        return {
+            x: (gridX - gridY) * isoW,
+            y: (gridX + gridY) * isoH - zHeight
+        };
+    }
+
+    // --- 3. Decoupled Simulation State Machine (Genuine RAFT Logic) ---
+
+    const RAFT_STATES = { FOLLOWER: 'FOLLOWER', CANDIDATE: 'CANDIDATE', LEADER: 'LEADER' };
+
+    class RaftNode {
+        constructor(id, x, y) {
+            this.id = id;
+            this.x = x; this.y = y; // Grid positions
+            this.term = 1;
+            this.state = RAFT_STATES.FOLLOWER;
+            this.votedFor = null;
+            this.log = []; // [{ term: 1, data: 101 }]
+            this.commitIndex = 0;
+            this.lastApplied = 0;
+            this.online = true;
+            this.electionTimeout = this.randomTimeout();
+            this.heartbeatTimer = 0;
+        }
+        randomTimeout() { return (5000 + Math.random() * 5000) * (1 / sim.speed); } // Slower than real life
+        resetElectionTimeout() { this.electionTimeout = this.randomTimeout(); }
+    }
+
+    const cityNodes = [
+        new RaftNode(1, 0, 0),    // Center
+        new RaftNode(2, 0, 10),   // South
+        new RaftNode(3, 10, 0),   // East
+        new RaftNode(4, 0, -10),  // North
+        new RaftNode(5, -10, 0)   // West
+    ];
+
+    const sim = {
+        running: true,
+        speed: 1.0, // 1x
+        tourMode: true,
+        currentTourStation: 0,
+        tourProgress: 0, // 0..1
+        tourDwellTime: 4000, // ms, minimum
+        lastUpdate: Date.now(),
+        // state transitions
+        currentLogId: 101
+    };
+
+    const TOUR_STATIONS = [
+        { id: 0, title: "Initial State", text: "All Islands start as Followers, waiting for instructions.", dwell: 5000 },
+        { id: 1, title: "Waiting (Timeout)", text: "Followers wait. Node 1 times out.", dwell: 5000 },
+        { id: 2, title: "Island 1: Candidate", text: "Node 1 enters term 2, votes for itself.", dwell: 5000 },
+        { id: 3, title: "RequestVote Beams", text: "Candidate sends votes requests to all others.", dwell: 6000 },
+        { id: 4, title: "Leader Elected", text: "Quorum Achieved! Node 1 is now Leader. Sending heartbeats.", dwell: 7000 },
+        { id: 5, title: "Receive Client Command", text: "Leader receives a new log entry. Must replicate it.", dwell: 6000 },
+        { id: 6, title: "Parallel Replication", text: "Leader sends AppendEntries messages with the new crate.", dwell: 7000 },
+        { id: 7, title: "Commit at Leader", text: "Majority (3/5) acknowledged. Entry is COMMITTED at Leader.", dwell: 8000 },
+        { id: 8, title: "Commit Propagation", text: "Leader applies entry. Tell others to commit.", dwell: 9000 },
+    ];
+
+    // --- 4. JavaScript Isometric Renderer & Code Generation Pipeline ---
+
+    function drawBuilding(ctx, gridX, gridY, w, d, h, style) {
+        const p1 = iso(gridX - w/2, gridY - d/2, 0); // Front-Left
+        const p2 = iso(gridX + w/2, gridY - d/2, 0); // Front-Right
+        const p3 = iso(gridX + w/2, gridY + d/2, 0); // Back-Right
+        const p4 = iso(gridX - w/2, gridY + d/2, 0); // Back-Left
+
+        const p1h = iso(gridX - w/2, gridY - d/2, h);
+        const p2h = iso(gridX + w/2, gridY - d/2, h);
+        const p3h = iso(gridX + w/2, gridY + d/2, h);
+        const p4h = iso(gridX - w/2, gridY + d/2, h);
+
+        // -- Ground Shadow (Translucent Oval) --
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+        ctx.beginPath();
+        ctx.ellipse(iso(gridX, gridY, 0).x, iso(gridX, gridY, 0).y, (w + d) * isoW/2, (w + d) * isoH/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // -- Right Face (Shade) --
+        ctx.fillStyle = Pal.bldg_right;
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p3h.x, p3h.y); ctx.lineTo(p2h.x, p2h.y); ctx.closePath();
+        ctx.fill();
+
+        // -- Left Face (Base Midtone) --
+        ctx.fillStyle = Pal.bldg_left;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p2h.x, p2h.y); ctx.lineTo(p1h.x, p1h.y); ctx.closePath();
+        ctx.fill();
+
+        // -- Top Face (Highlight) --
+        ctx.fillStyle = Pal.bldg_top;
+        ctx.beginPath();
+        ctx.moveTo(p1h.x, p1h.y); ctx.lineTo(p2h.x, p2h.y); ctx.lineTo(p3h.x, p3h.y); ctx.lineTo(p4h.x, p4h.y); ctx.closePath();
+        ctx.fill();
+
+        // -- Architectural Details (Windows) --
+        ctx.strokeStyle = Pal.shore;
+        ctx.lineWidth = 0.5;
+        const floors = Math.floor(h / 8);
+        const bays = Math.floor((w+d) * isoW / 8);
+
+        // Windows (warm light)
+        ctx.fillStyle = 'rgba(255, 255, 200, 0.2)';
+        for (let f = 0; f < floors - 1; f++) {
+            const zOff = 4 + f * 8;
+            for (let b = 0; b < bays; b++) {
+                const bOff = - (w+d)/2 + 2 + b * 4;
+                const win1 = iso(gridX + bOff, gridY - d/2, zOff);
+                if (bOff < w/2) {
+                    ctx.fillRect(win1.x, win1.y, 2, 4); // Left wall
+                }
+            }
+        }
+
+        // -- Top Status Light (Pulsating) --
+        if (style) {
+            const topC = iso(gridX, gridY, h + 2);
+            ctx.fillStyle = style;
+            const size = 3 + Math.sin(Date.now() / 200) * 1.0; // Pulse
+            ctx.beginPath();
+            ctx.ellipse(topC.x, topC.y, size * 2, size, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = style;
+            ctx.fillStyle = 'white';
+            ctx.beginPath(); ctx.ellipse(topC.x, topC.y, size/2 * 2, size/2, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    function drawCrate(ctx, gridX, gridY, h, color, filled, label) {
+        const cx = iso(gridX, gridY, h);
+        const size = 3;
+        ctx.fillStyle = filled ? color : Pal.water;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // Top-down crate shape (Isometric Diamond)
+        ctx.moveTo(cx.x - size*2, cx.y);
+        ctx.lineTo(cx.x, cx.y - size);
+        ctx.lineTo(cx.x + size*2, cx.y);
+        ctx.lineTo(cx.x, cx.y + size);
+        ctx.closePath();
+        if (filled) ctx.fill();
+        ctx.stroke();
+
+        // Label (e.g., T1, 101)
+        if (label) {
+            ctx.fillStyle = filled ? Pal.bldg_right : color;
+            ctx.font = '8px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, cx.x, cx.y + 2);
+        }
+    }
+
+    function drawLogCarrierBarge(ctx, gridX, gridY, zHeight, nodeID, stateData) {
+        const bx = iso(gridX, gridY, zHeight);
+        ctx.save();
+        ctx.translate(bx.x, bx.y);
+
+        // Chassis (Isometric Trapezoid)
+        ctx.fillStyle = Pal.barge;
+        ctx.beginPath();
+        ctx.moveTo(-16, 0); ctx.lineTo(0, -8); ctx.lineTo(16, 0); ctx.lineTo(0, 8); ctx.closePath();
+        ctx.fill();
+
+        // Cab
+        ctx.fillStyle = Pal.barge_cab;
+        ctx.beginPath();
+        ctx.moveTo(4, 0); ctx.lineTo(12, -4); ctx.lineTo(16, 0); ctx.lineTo(8, 4); ctx.closePath();
+        ctx.fill();
+
+        // Cargo Bays
+        ctx.strokeStyle = Pal.shore;
+        ctx.lineWidth = 1;
+        // Bay 1: Uncommitted
+        ctx.strokeRect(-12, -6, 12, 12);
+        // Bay 2: Committed
+        ctx.strokeRect(0, -6, 12, 12);
+
+        // Status Indicator
+        if (stateData) {
+            const statusCol = Pal[`status_${stateData.state.toLowerCase()}`];
+            ctx.fillStyle = statusCol;
+            ctx.shadowBlur = 10; ctx.shadowColor = statusCol;
+            ctx.beginPath(); ctx.ellipse(12, -2, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        // Logs/Crates
+        if (stateData && stateData.log) {
+            let lastY = -4;
+            // Draw uncommitted crates (stacked bottom-up)
+            for (let i = 0; i < stateData.log.length; i++) {
+                const entry = stateData.log[i];
+                if (entry.term > stateData.commitIndex) {
+                    drawCrate(ctx, 0, -4 / isoH, lastY / isoW, Pal.log_crate, false, `T${entry.term}`);
+                    lastY -= 6;
+                }
+            }
+            lastY = -4;
+             // Draw committed crates (stacked bottom-up)
+             for (let i = 0; i < stateData.log.length; i++) {
+                const entry = stateData.log[i];
+                if (entry.term <= stateData.commitIndex && entry.term > 0) {
+                    drawCrate(ctx, 4/isoH, -4/isoH, lastY/isoW, Pal.commit_crate, true, `${entry.data}`);
+                    lastY -= 6;
+                }
+            }
+        }
+
+        ctx.restore();
+    }
+
+    // --- 5. Main Loop & Interaction Pipeline ---
+
+    function update() {
+        const now = Date.now();
+        const delta = (now - sim.lastUpdate) * sim.speed;
+        sim.lastUpdate = now;
+
+        // Camera Lerp
+        cam.x += (cam.tx - cam.x) * cam.damping;
+        cam.y += (cam.ty - cam.y) * cam.damping;
+        cam.z += (cam.tz - cam.z) * cam.damping;
+
+        // Raft Logic Updates
+        if (sim.running && !sim.tourMode) {
+            cityNodes.forEach(node => {
+                if (node.online && node.state === RAFT_STATES.FOLLOWER) {
+                    node.electionTimeout -= delta;
+                    if (node.electionTimeout <= 0) {
+                        // Start Election
+                        node.state = RAFT_STATES.CANDIDATE;
+                        node.term++;
+                        node.votedFor = node.id;
+                        node.resetElectionTimeout();
+                        // (Mock: Assume instant quorum and become leader for simple flow)
+                        setTimeout(() => {
+                            node.state = RAFT_STATES.LEADER;
+                            // Leader Setup: Add an empty "T1, CMD 1" commit for visual start
+                            if(node.id === 1 && node.commitIndex === 0) {
+                                node.log.push({term: 1, data: 'INIT'});
+                                node.commitIndex = 1;
+                            }
+                        }, 1000 * (1/sim.speed));
+                    }
+                }
+            });
+        }
+
+        // Tour Mode Progress
+        if (sim.tourMode && sim.running) {
+            const station = TOUR_STATIONS[sim.currentTourStation];
+            const realDwell = Math.max(sim.tourDwellTime, (station.dwell || 0) * (1 / sim.speed));
+            sim.tourProgress += delta / realDwell;
+            
+            if (sim.tourProgress >= 1.0) {
+                // Advance to next station automatically
+                advanceTour();
+            }
+        }
+    }
+
+    function advanceTour() {
+        if(sim.currentTourStation < TOUR_STATIONS.length - 1) {
+            sim.currentTourStation++;
+            sim.tourProgress = 0;
+            // Update UI
+            updateTourUI();
+            updateStateInspector(1); // Inspect node 1 by default
+        } else {
+            // End of Tour, switch to free-run mode
+            sim.tourMode = false;
+            sim.running = true;
+            document.getElementById('story-card').style.display = 'none';
+        }
+    }
+
+    function updateTourUI() {
+        const station = TOUR_STATIONS[sim.currentTourStation];
+        document.getElementById('station-number').innerText = station.id;
+        document.getElementById('station-title').innerText = station.title;
+        document.getElementById('station-explanation').innerText = station.text;
+        
+        // Custom camera targets based on station
+        const followNode = cityNodes[0];
+        cam.tx = followNode.x * isoW + (followNode.id - 3)*5 * isoW;
+        cam.ty = followNode.y * isoH - 100;
+
+        // Custom State Actions for the tour
+        const node1 = cityNodes[0];
+        switch(station.id) {
+            case 0: break; // Init
+            case 2: node1.state = RAFT_STATES.CANDIDATE; node1.term = 2; node1.votedFor = node1.id; break;
+            case 4: node1.state = RAFT_STATES.LEADER; break;
+            case 5: if(node1.id === 1 && node1.log.length === 1) node1.log.push({term: 2, data: sim.currentLogId++}); break;
+            case 7: if(node1.id === 1 && node1.commitIndex < node1.log.length) node1.commitIndex = node1.log.length; break;
+            case 8: // Followers commit
+                cityNodes.forEach(n => {
+                    if (n.log.length < node1.log.length) {
+                        n.log = [...node1.log]; // Simplification for tour
+                        n.commitIndex = node1.commitIndex;
+                    }
+                }); break;
+        }
+    }
+
+    function updateGlobalMetrics() {
+        // Find Leader
+        let leader = cityNodes.find(n => n.state === RAFT_STATES.LEADER);
+        document.getElementById('metric-term').innerText = cityNodes[0].term;
+        document.getElementById('metric-leader').innerText = leader ? `Island ${leader.id}` : "WAITING";
+        document.getElementById('metric-commit').innerText = leader ? leader.commitIndex : "0";
+    }
+
+    function updateStateInspector(nodeId) {
+        const node = cityNodes[nodeId - 1];
+        if (!node) return;
+        document.getElementById('state-title').innerText = `Island ${node.id}: ${node.state}`;
+        const col = Pal[`status_${node.state.toLowerCase()}`];
+        document.getElementById('state-title').style.color = col;
+
+        let logStr = "[<br>";
+        node.log.forEach((entry, idx) => {
+            const committed = idx < node.commitIndex;
+            const entryStr = committed ? 
+                ` <span class="commit-crate-v">{ T:<span class="term-v">${entry.term}</span>, D:${entry.data} }</span>` :
+                ` <span class="log-crate-v">{ T:${entry.term}, D:??? }</span>`; // Hide uncommitted data
+            logStr += `  ${entryStr},<br>`;
+        });
+        logStr += "]";
+
+        const contentStr = `
+            Term: <span class="term-v">${node.term}</span><br>
+            VotedFor: ${node.votedFor ? `Island ${node.votedFor}` : "null"}<br>
+            CommitIndex: ${node.commitIndex}<br>
+            LastApplied: ${node.lastApplied}<br>
+            Election T/O: ${node.state === RAFT_STATES.FOLLOWER ? `${Math.round(node.electionTimeout/1000)}s` : "N/A"}<br>
+            ---LogEntries---<br>
+            ${logStr}
+        `;
+        document.getElementById('state-content').innerHTML = contentStr;
+    }
+
+    function draw() {
+        ctx.fillStyle = Pal.bg;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.save();
+        ctx.translate(W/2 - cam.x * cam.z, H/2 - cam.y * cam.z);
+        ctx.scale(cam.z, cam.z);
+
+        // -- Water and Island Bases --
+        ctx.fillStyle = Pal.water;
+        ctx.fillRect(-W*2, -H*2, W*4, H*4);
+
+        // -- Consensus Cables --
+        const node1 = cityNodes[0];
+        if (node1.state === RAFT_STATES.LEADER || node1.state === RAFT_STATES.CANDIDATE) {
+            ctx.lineWidth = 1;
+            const style = node1.state === RAFT_STATES.LEADER ? Pal.status_leader : Pal.status_candidate;
+            cityNodes.forEach(target => {
+                if(target.id !== node1.id) {
+                    const start = iso(node1.x, node1.y, 1);
+                    const end = iso(target.x, target.y, 1);
+                    ctx.shadowBlur = 8; ctx.shadowColor = style;
+                    ctx.strokeStyle = style;
+                    ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+                    ctx.shadowBlur = 0;
+
+                    // Dash pulses
+                    ctx.setLineDash([10, 20]);
+                    ctx.lineDashOffset = -Date.now() / 50;
+                    ctx.strokeStyle = 'white';
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            });
+        }
+
+        // -- Raft Fortresses (Buildings) --
+        cityNodes.forEach(node => {
+            const statusCol = node.online ? Pal[`status_${node.state.toLowerCase()}`] : Pal.status_offline;
+            drawBuilding(ctx, node.x, node.y, 5, 5, 20, statusCol);
+
+            // Gantry for leader
+            if(node.state === RAFT_STATES.LEADER) {
+                const start = iso(node.x, node.y, 22);
+                const end = iso(node.x, node.y, 35);
+                ctx.strokeStyle = Pal.conduit_on;
+                ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke();
+                ctx.fillRect(iso(node.x-2, node.y-2, 35).x, iso(node.x-2, node.y-2, 35).y, isoW*2, isoH*2);
+            }
+
+            // Labels
+            const labelPos = iso(node.x, node.y, 40);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(labelPos.x - 30, labelPos.y - 12, 60, 16);
+            ctx.fillStyle = statusCol; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center'; ctx.fillText(`N${node.id}: ${node.state}`, labelPos.x, labelPos.y);
+        });
+
+        // -- Log Carrier Barge --
+        drawLogCarrierBarge(ctx, node1.x, node1.y, 2, 1, node1);
+
+        ctx.restore();
+
+        // UI Updates
+        updateGlobalMetrics();
+        updateStateInspector(1);
+        if (sim.tourMode) {
+            document.getElementById('progress-bar').style.width = `${sim.tourProgress * 100}%`;
+        }
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+    loop();
+
+    // --- 6. Interaction Handlers ---
+
+    canvas.addEventListener('mousedown', e => { mouse.down = true; mouse.px = e.clientX; mouse.py = e.clientY; });
+    window.addEventListener('mouseup', () => { mouse.down = false; });
+    window.addEventListener('mousemove', e => {
+        if (mouse.down) {
+            cam.tx -= (e.clientX - mouse.px) / cam.z;
+            cam.ty -= (e.clientY - mouse.py) / cam.z;
+            mouse.px = e.clientX; mouse.py = e.clientY;
+        }
+    });
+    window.addEventListener('wheel', e => {
+        cam.tz = Math.max(0.3, Math.min(2.5, cam.tz + (e.deltaY < 0 ? 0.1 : -0.1)));
+    });
+
+    document.addEventListener('keydown', e => {
+        if (e.code === 'Space') { sim.running = !sim.running; document.getElementById('btn-playpause').innerText = sim.running ? "Pause (Space)" : "Play (Space)"; }
+        if (e.code === 'KeyS') { advanceTour(); }
+        if (e.code === 'KeyR') { sim.currentTourStation = 0; updateTourUI(); }
+    });
+
+    document.getElementById('btn-playpause').onclick = () => { sim.running = !sim.running; document.getElementById('btn-playpause').innerText = sim.running ? "Pause (Space)" : "Play (Space)"; };
+    document.getElementById('btn-next').onclick = advanceTour;
+    document.getElementById('btn-reset').onclick = () => { sim.currentTourStation = 0; updateTourUI(); };
+    document.getElementById('btn-faster').onclick = () => { sim.speed = Math.min(4, sim.speed * 2); document.getElementById('speed-readout').innerText = `${sim.speed}x`; };
+    document.getElementById('btn-slower').onclick = () => { sim.speed = Math.max(0.125, sim.speed / 2); document.getElementById('speed-readout').innerText = `${sim.speed}x`; };
+
+    // Start with tour station 0
+    updateTourUI();
+
+})();
+</script>
+</body>
+</html>
