@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learnscape: LLM Factory Explainer</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #121417; color: #eee; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        canvas { display: block; }
+        
+        /* UI Overlay */
+        #hud { position: absolute; top: 10px; right: 10px; width: 320px; background: rgba(20, 25, 30, 0.9); border: 1px solid #444; padding: 15px; box-sizing: border-box; pointer-events: auto; }
+        h1 { font-size: 1.1rem; margin: 0 0 10px 0; color: #00ffcc; text-transform: uppercase; }
+        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.8rem; }
+        .telemetry-label { color: #aaa; }
+        .telemetry-value { color: #fff; font-weight: bold; }
+        
+        /* Explanation Panel */
+        #narration { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 60%; min-width: 400px; max-width: 800px; background: rgba(20, 25, 30, 0.95); border: 2px solid #00ffcc; padding: 20px; box-sizing: border-box; text-align: left; display: none; }
+        #narration h2 { margin: 0 0 10px 0; color: #00ffcc; font-size: 1.3rem; }
+        #narration p { margin: 0; font-size: 0.95rem; line-height: 1.5; color: #eee; }
+        #narration .delta { margin-top: 10px; padding-top: 10px; border-top: 1px solid #444; font-size: 0.8rem; color: #00ffcc; }
+
+        /* Controls */
+        #controls { position: absolute; bottom: 10px; right: 10px; background: rgba(20, 25, 30, 0.9); border: 1px solid #444; padding: 5px; display: flex; gap: 5px; }
+        button { background: #333; color: white; border: 1px solid #555; padding: 5px 10px; cursor: pointer; font-family: monospace; }
+        button:hover { background: #444; }
+        button.active { background: #00ffcc; color: #000; border-color: #00ffcc; }
+    </style>
+</head>
+<body>
+
+<canvas id="simCanvas"></canvas>
+
+<!-- Telemetry HUD -->
+<div id="hud">
+    <h1>LLM FACTORY: TELEMETRY</h1>
+    <div class="telemetry-row"><span class="telemetry-label">MODEL ID:</span> <span class="telemetry-value">LLM_v1_Alphasingle (7B)</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">PHASE:</span> <span class="telemetry-value" id="val-phase">INIT</span></div>
+    <div style="height: 10px;"></div>
+    <div class="telemetry-row"><span class="telemetry-label">ENTROPY:</span> <span class="telemetry-value" id="val-entropy">10.50</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">LOSS:</span> <span class="telemetry-value" id="val-loss">12.00</span></div>
+    <div style="height: 10px;"></div>
+    <div class="telemetry-row"><span class="telemetry-label">KNOWLEDGE BASE:</span> <span class="telemetry-value" id="val-knowledge">NONE</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">NEXT-TOKEN ACC:</span> <span class="telemetry-value" id="val-cap-token">1%</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">INSTRUCT-FOLLOW:</span> <span class="telemetry-value" id="val-cap-instruct">0%</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">SAFETY ALIGN:</span> <span class="telemetry-value" id="val-cap-safety">0%</span></div>
+    <div class="telemetry-row"><span class="telemetry-label">CHAT FORMATTING:</span> <span class="telemetry-value" id="val-cap-chat">FALSE</span></div>
+</div>
+
+<!-- Narration Panel -->
+<div id="narration">
+    <h2 id="narration-title">Station Title</h2>
+    <p id="narration-text">Explanation text...</p>
+    <div class="delta" id="narration-delta">STATE MUTATION: None</div>
+</div>
+
+<!-- Playback Controls -->
+<div id="controls">
+    <button id="btn-pause">PAUSE</button>
+    <button id="btn-1x" class="active">1x</button>
+    <button id="btn-2x">2x</button>
+    <button id="btn-skip">SKIP TOUR</button>
+</div>
+
+<script type="module">
+    
+    // =========================================================================
+    // 1. Core Simulation Logic (Headless-ready)
+    // =========================================================================
+    
+    // The underlying state of the model being trained
+    const simState = {
+        vehicle: {
+            gridX: 0, gridY: 0, // Logical grid position
+            phase: 'RAW',
+            metrics: {
+                entropy: 10.5,
+                loss: 12.0,
+                knowledge: 'None',
+                capToken: 0.01,
+                capInstruct: 0.0,
+                capSafety: 0.0,
+                capChat: false
+            }
+        },
+        activeStationIndex: -1,
+        tourMode: true,
+        targetSpeed: 1, // 1x, 2x, etc.
+        isPaused: false,
+        simStep: 0
+    };
+
+    // Define the distinct stations and the mutations they perform
+    const stations = [
+        { 
+            id: 'H1', name: 'Corpus Ingest Hangar', gridX: 0, gridY: 0, type: 'hangar',
+            title: 'Phase 1: Pre-training (Knowledge)', 
+            text: 'We begin with a base model containing random weights. The input is a massive, raw dataset—trillions of tokens from the public internet, books, and code. This provides the raw raw material for learning language.',
+            delta: 'Vehicle State: Reset to RAW defaults.',
+            action: (model) => {
+                model.phase = 'RAW';
+                model.metrics = { entropy: 10.5, loss: 12.0, knowledge: 'None', capToken: 0.01, capInstruct: 0.0, capSafety: 0.0, capChat: false };
+            }
+        },
+        { 
+            id: 'P1', name: 'Tokenization Core', gridX: 2, gridY: 0, type: 'process',
+            title: 'Station 1: Tokenization',
+            text: 'Neural networks don\'t read text; they process numbers. This station converts raw text characters into sub-word integers called Tokens using Byte-Pair Encoding (BPE). The vocabulary size is established here.',
+            delta: 'No direct weight change, but prepares data for training.',
+            action: (model) => {} // Pure data prep
+        },
+        { 
+            id: 'P2', name: 'Exascale Compute Cluster', gridX: 4, gridY: 0, type: 'process',
+            title: 'Station 2: Massive Self-Supervision',
+            text: 'This is the core of pre-training. Using colossal compute resources, the model performs the "Next-Token Prediction" task over and over. By minimizing prediction error, the model internalizes the statistical structure of language, grammar, reasoning, and world facts.',
+            delta: 'Δ Entropy: -7.5 (Logic emerging), Δ Loss: -10.0 (Predictions improving), Knowledge: Global (Unfiltered).',
+            action: (model) => {
+                model.phase = 'PRETRAINED';
+                model.metrics.entropy = 3.0;
+                model.metrics.loss = 2.0;
+                model.metrics.knowledge = 'Global (Unfiltered)';
+                model.metrics.capToken = 0.65;
+            }
+        },
+        { 
+            id: 'H2', name: 'Curated Dataset Hangar', gridX: 4, gridY: 2, type: 'hangar',
+            title: 'Phase 2: Supervised Fine-Tuning (SFT)',
+            text: 'Pre-training is complete. We now possess a "Base Model." It knows facts but behaves like an advanced autocomplete engine, not an assistant. We ingest high-quality, human-curated (Prompt, Ideal Response) demonstrations here.',
+            delta: 'Preparing high-quality demonstration data.',
+            action: (model) => {}
+        },
+        { 
+            id: 'P4', name: 'Behavioral Cloning Lab', gridX: 6, gridY: 2, type: 'process',
+            title: 'Station 3: Instruction Following',
+            text: 'Using supervised learning, we train the model to output the ideal response when given a specific prompt. The model also learns chat formatting (e.g., separating <|user|> and <|assistant|> messages). We are "cloning" the behavior demonstrated in the SFT dataset.',
+            delta: 'Δ Loss: -0.5, Δ Instruction Following: +75% (Model can now follow commands), Chat Formatting: ENABLED.',
+            action: (model) => {
+                model.phase = 'SFT';
+                model.metrics.loss = 1.5; // Slight refinement
+                model.metrics.capInstruct = 0.75;
+                model.metrics.capChat = true;
+            }
+        },
+        { 
+            id: 'O1', name: 'Preference Model Evaluator', gridX: 6, gridY: 4, type: 'observation',
+            title: 'Phase 3: Alignment (RLHF/DPO)',
+            text: 'The SFT model is functional but may hallucinate, give unsafe advice, or be overly verbose. We introduce a "Reward Model" or reference policy trained on human preference data (e.g., Response A is better than Response B).',
+            delta: 'Comparing model output against human preferences.',
+            action: (model) => {}
+        },
+        { 
+            id: 'O2', name: 'Policy Optimization Loop', gridX: 8, gridY: 4, type: 'observation',
+            title: 'Station 4: Reinforcement Learning (PPO/DPO)',
+            text: 'We now adjust the SFT model weights using algorithms like PPO (Reinforcement Learning) or DPO (Direct Optimization). The objective is to maximize the "reward" (score from the preference model) while ensuring the model stays close to its original SFT capability (using a KL-penalty).',
+            delta: 'Δ Loss (Aligned): Minimal, Δ Safety Alignment: +90% (Model avoids harmful/rude output).',
+            action: (model) => {
+                model.phase = 'ALIGNED';
+                model.metrics.loss = 1.2; // Optimized for human preference
+                model.metrics.capSafety = 0.90;
+                model.metrics.capToken = 0.60; // Slight drop in generic next-token
+                model.metrics.knowledge = 'Curated (Aligned)';
+            }
+        },
+        { 
+            id: 'O3', name: 'Model Deployment Gate', gridX: 8, gridY: 6, type: 'observation',
+            title: 'Finish: Ready for Deployment',
+            text: 'The model has completed all training phases. It is knowledgeable, follows instructions, and is aligned to be helpful, honest, and harmless. It is ready to power a chatbot application.',
+            delta: 'Final model available for inference.',
+            action: (model) => {}
+        }
+    ];
+
+    // Build the waypoint path the vehicle follows
+    const path = [];
+    for(let i=0; i<stations.length-1; i++) {
+        path.push({type: 'move', from: stations[i], to: stations[i+1]});
+    }
+
+    // =========================================================================
+    // 2. Isometric Renderer (Canvas)
+    // =========================================================================
+    
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    const tileW = 60; // Isometric tile dimensions
+    const tileH = 30;
+    const isoXoffset = 0.5; // Offset to center map (as % of width)
+    const isoYoffset = 0.2; // Offset to center map (as % of height)
+
+    // Simplified isometric geometry colors (Base / Light / Dark)
+    const colors = {
+        track: ['#2A2F35', '#33383E', '#22272C'], // Base, Top, Side
+        hangar: ['#C57D29', '#E5A04D', '#A56019'], // Dist A colors
+        process: ['#297DC5', '#4DA0E5', '#1960A5'], // Dist B colors
+        observation: ['#C52929', '#E54D4D', '#A51919'], // Dist C colors
+        vehicle: ['#00FFCC', '#66FFEE', '#00CC99'],
+        text: '#EEEEEE',
+        label: '#AAAAAA'
+    };
+
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Map 2D grid (x,y) to Isometric screen (x,y)
+    function gridToIso(gx, gy) {
+        return {
+            x: (gx - gy) * (tileW / 2) + width * isoXoffset,
+            y: (gx + gy) * (tileH / 2) + height * isoYoffset
+        };
+    }
+
+    // Standard isometric block drawing primitive
+    function drawIsoBlock(ctx, gx, gy, gz, gw, gd, gh, colSet) {
+        const isoBase = gridToIso(gx, gy);
+        const isoTop = gridToIso(gx, gy);
+        isoTop.y -= gz * tileH; // Apply Z height shift
+
+        // Define the 4 points of the bottom face (on the grid)
+        const p1 = gridToIso(gx, gy);
+        const p2 = gridToIso(gx + gw, gy);
+        const p3 = gridToIso(gx + gw, gy + gd);
+        const p4 = gridToIso(gx, gy + gd);
+        
+        // Define points of the top face (shifted by gh)
+        const pt1 = { x: p1.x, y: p1.y - gh * tileH };
+        const pt2 = { x: p2.x, y: p2.y - gh * tileH };
+        const pt3 = { x: p3.x, y: p3.y - gh * tileH };
+        const pt4 = { x: p4.x, y: p4.y - gh * tileH };
+
+        // 1. Draw Left Face (Dark Side)
+        ctx.fillStyle = colSet[2];
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.lineTo(pt4.x, pt4.y);
+        ctx.lineTo(pt1.x, pt1.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // 2. Draw Right Face (Medium Side)
+        ctx.fillStyle = colSet[0];
+        ctx.beginPath();
+        ctx.moveTo(p4.x, p4.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(pt3.x, pt3.y);
+        ctx.lineTo(pt4.x, pt4.y);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3. Draw Top Face (Bright Side)
+        ctx.fillStyle = colSet[1];
+        ctx.beginPath();
+        ctx.moveTo(pt1.x, pt1.y);
+        ctx.lineTo(pt2.x, pt2.y);
+        ctx.lineTo(pt3.x, pt3.y);
+        ctx.lineTo(pt4.x, pt4.y);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    function drawIsoTrack(ctx, gx, gy, gw, gd) {
+        drawIsoBlock(ctx, gx, gy, 0, gw, gd, 0.1, colors.track); // Very thin block
+    }
+
+    // =========================================================================
+    // 3. Pacing, UI & Main Loop
+    // =========================================================================
+    
+    let currentWaypointIndex = 0;
+    let lerpFactor = 0; // 0 to 1 progress between waypoints
+    let dwellTimer = 0; // Counts frames during pause at station
+    let targetDwellTime = 0; // Target duration for reading in frames
+
+    // Dwell time calculation based on word count (Phase 2 Adaptive Pacing)
+    function calculateDwellTimeMs(text) {
+        const words = text.split(' ').length;
+        const wpm = 180; // Reading speed assumption
+        const msPerWord = (60 * 1000) / wpm;
+        return Math.max(4000, words * msPerWord); // minimum 4 seconds
+    }
+
+    // DOM Elements
+    const elNarration = document.getElementById('narration');
+    const elTitle = document.getElementById('narration-title');
+    const elText = document.getElementById('narration-text');
+    const elDelta = document.getElementById('narration-delta');
+    
+    const uiValues = {
+        phase: document.getElementById('val-phase'),
+        entropy: document.getElementById('val-entropy'),
+        loss: document.getElementById('val-loss'),
+        knowledge: document.getElementById('val-knowledge'),
+        token: document.getElementById('val-cap-token'),
+        instruct: document.getElementById('val-cap-instruct'),
+        safety: document.getElementById('val-cap-safety'),
+        chat: document.getElementById('val-cap-chat'),
+    };
+
+    const btns = {
+        pause: document.getElementById('btn-pause'),
+        speed1: document.getElementById('btn-1x'),
+        speed2: document.getElementById('btn-2x'),
+        skip: document.getElementById('btn-skip')
+    };
+
+    // UI Event Listeners
+    btns.pause.addEventListener('click', () => { simState.isPaused = !simState.isPaused; btns.pause.textContent = simState.isPaused ? "PLAY" : "PAUSE"; });
+    btns.speed1.addEventListener('click', () => { simState.targetSpeed = 1; btns.speed1.classList.add('active'); btns.speed2.classList.remove('active'); });
+    btns.speed2.addEventListener('click', () => { simState.targetSpeed = 2; btns.speed2.classList.add('active'); btns.speed1.classList.remove('active'); });
+    btns.skip.addEventListener('click', () => { simState.tourMode = false; elNarration.style.display = 'none'; btns.skip.style.display = 'none'; });
+
+    // Update the HTML HUD with live simulation data
+    function updateTelemetry() {
+        const v = simState.vehicle;
+        uiValues.phase.textContent = v.phase;
+        uiValues.entropy.textContent = v.metrics.entropy.toFixed(2);
+        uiValues.loss.textContent = v.metrics.loss.toFixed(2);
+        uiValues.knowledge.textContent = v.metrics.knowledge;
+        uiValues.token.textContent = (v.metrics.capToken * 100).toFixed(0) + '%';
+        uiValues.instruct.textContent = (v.metrics.capInstruct * 100).toFixed(0) + '%';
+        uiValues.safety.textContent = (v.metrics.capSafety * 100).toFixed(0) + '%';
+        uiValues.chat.textContent = v.metrics.capChat ? "ENABLED" : "FALSE";
+        uiValues.chat.style.color = v.metrics.capChat ? "#00ffcc" : "#ff4444";
+    }
+
+    // Main Simulation Loop
+    function loop() {
+        if (!simState.isPaused) {
+            simState.simStep++;
+
+            if (dwellTimer > 0) {
+                // We are dwelling (pausing) at a station for reading
+                dwellTimer -= simState.targetSpeed;
+                if (dwellTimer <= 0) {
+                    elNarration.style.display = 'none'; // Hide narration when done
+                    currentWaypointIndex++;
+                    if (currentWaypointIndex >= path.length) currentWaypointIndex = 0; // Loop back to start
+                }
+            } else {
+                // We are moving between stations
+                lerpFactor += 0.01 * simState.targetSpeed;
+                
+                // Update vehicle logical position
+                const currentMove = path[currentWaypointIndex];
+                simState.vehicle.gridX = currentMove.from.gridX + (currentMove.to.gridX - currentMove.from.gridX) * lerpFactor;
+                simState.vehicle.gridY = currentMove.from.gridY + (currentMove.to.gridY - currentMove.from.gridY) * lerpFactor;
+
+                if (lerpFactor >= 1) {
+                    // Arrived at the next station
+                    lerpFactor = 0;
+                    const arrivedStation = currentMove.to;
+                    
+                    // 1. Perform Mutation Logic (Phase 1 Decoupled Engine)
+                    if(arrivedStation.action) arrivedStation.action(simState.vehicle);
+                    updateTelemetry();
+
+                    // 2. Handle Tour Pacing (Phase 2)
+                    if (simState.tourMode && arrivedStation.text) {
+                        elTitle.textContent = arrivedStation.title || arrivedStation.name;
+                        elText.textContent = arrivedStation.text;
+                        elDelta.textContent = arrivedStation.delta || "State Mutation: None";
+                        elNarration.style.display = 'block';
+                        
+                        const dwellTimeMs = calculateDwellTimeMs(arrivedStation.text);
+                        targetDwellTime = Math.round((dwellTimeMs / 1000) * 60); // Convert MS to 60fps frames
+                        dwellTimer = targetDwellTime;
+                    } else {
+                        // Skip dwell in watchable mode
+                        currentWaypointIndex++;
+                        if (currentWaypointIndex >= path.length) currentWaypointIndex = 0;
+                    }
+                }
+            }
+        }
+
+        // --- RENDERING (Phase 4/5) ---
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw Tracks first (Depth sorting: bottom)
+        for (let i = 0; i < path.length; i++) {
+            const p = path[i];
+            const startX = Math.min(p.from.gridX, p.to.gridX);
+            const startY = Math.min(p.from.gridY, p.to.gridY);
+            const w = Math.abs(p.from.gridX - p.to.gridX) + 1;
+            const d = Math.abs(p.from.gridY - p.to.gridY) + 1;
+            drawIsoTrack(ctx, startX, startY, w, d);
+        }
+
+        // Draw Station Blocks (Static)
+        stations.forEach(s => {
+            let colSet = colors.track;
+            if(s.type === 'hangar') colSet = colors.hangar;
+            if(s.type === 'process') colSet = colors.process;
+            if(s.type === 'observation') colSet = colors.observation;
+            drawIsoBlock(ctx, s.gridX, s.gridY, 0.1, 1, 1, 1, colSet);
+            
+            // Station Labels
+            const isoPos = gridToIso(s.gridX + 0.5, s.gridY + 0.5);
+            ctx.fillStyle = colors.label;
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(s.id + ": " + s.name, isoPos.x, isoPos.y - 1.5 * tileH);
+        });
+
+        // Draw Vehicle (Depth sorting: dynamic, draw on top)
+        drawIsoBlock(ctx, simState.vehicle.gridX, simState.vehicle.gridY, 0.15, 0.8, 0.8, 0.6, colors.vehicle);
+        // Vehicle label
+        const vIso = gridToIso(simState.vehicle.gridX + 0.4, simState.vehicle.gridY + 0.4);
+        ctx.fillStyle = colors.vehicle[0];
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText("LLM v1", vIso.x, vIso.y - 1.0 * tileH);
+
+        requestAnimationFrame(loop);
+    }
+
+    // Initialization
+    updateTelemetry();
+    loop();
+
+</script>
+</body>
+</html>
